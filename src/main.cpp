@@ -7,27 +7,25 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
-// ================= CẤU HÌNH WIFI =================
-const char* ssid       = "TP-Link_AE2A";         
-const char* password   = "14878459";             
+// ================= WIFI CONFIGURATION =================
+const char* ssid       = "wifiname";         
+const char* password   = "urwifipassword";             
 
-// ================= CẤU HÌNH THỜI GIAN (NTP) =================
+// ================= (NTP) =================
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 7 * 3600; // GMT+7 cho Việt Nam
 const int   daylightOffset_sec = 0;
 
-// ================= CẤU HÌNH PHẦN CỨNG =================
 #define TFT_CS    10
 #define TFT_DC    11
 #define TFT_RST   12
 #define TFT_MOSI  21
 #define TFT_SCLK  14
 #define BTN_PIN   18
-#define TOUCH_PIN 3 // Chân GPIO 3
+#define TOUCH_PIN 3
 
 Adafruit_ST7789 tft = Adafruit_ST7789(&SPI, TFT_CS, TFT_DC, TFT_RST);
 
-// ================= BIẾN HỆ THỐNG =================
 int currentState = 0; 
 bool isPetted = false; 
 
@@ -37,20 +35,18 @@ bool buttonState = HIGH;
 unsigned long lastDebounceTime = 0;
 unsigned long lastTouchTime = 0;
 
-// NGƯỠNG ĐÃ ĐƯỢC CHỈNH LÊN 80K CHO CHUẨN XÁC
 int TOUCH_THRESHOLD = 70000; 
 
-// Data thực tế
+// Data realtime
 String currentTimeStr = "--:--";
 String currentWeatherStr = "Updating...";
 unsigned long lastWeatherUpdate = 0;
 int lastMinute = -1; 
 bool forceRedraw = true; 
 
-// Animation Cảm xúc
+// Animation 
 unsigned long nextActionTime = 3000; 
 
-// ================= KHAI BÁO HÀM =================
 void drawState();
 void updateWeather();
 void updateTime();
@@ -92,14 +88,14 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
-  // 1. CẬP NHẬT GIỜ VÀ THỜI TIẾT
+  // 1. weather and time update
   updateTime();
   if (currentMillis - lastWeatherUpdate > 600000) { 
     updateWeather();
     lastWeatherUpdate = currentMillis;
   }
 
-  // 2. XỬ LÝ NÚT BẤM
+  // 2. button 
   bool reading = digitalRead(BTN_PIN);
   if (reading != lastButtonState) {
     lastDebounceTime = currentMillis;
@@ -116,21 +112,18 @@ void loop() {
   }
   lastButtonState = reading;
 
-  // 3. XỬ LÝ TOUCH VUỐT VE (LOGIC LIÊN TỤC)
+  // 3. Touch sensor 
   int touchValue = touchRead(TOUCH_PIN);
   
-  // In ra Serial 10 lần 1 giây (mỗi 100ms)
   static unsigned long lastPrint = 0;
   if (currentMillis - lastPrint > 100) {
     Serial.printf("Touch Value (Pin 3): %d\n", touchValue);
     lastPrint = currentMillis;
   }
 
-  // Khi đang sờ: Nếu giá trị vượt ngưỡng
   if (touchValue > TOUCH_THRESHOLD) {
     lastTouchTime = currentMillis; // Liên tục cập nhật thời gian chạm cuối cùng
     
-    // Nếu chưa vui vẻ thì chuyển sang vui vẻ và vẽ lại
     if (!isPetted) {
       isPetted = true;
       forceRedraw = true;
@@ -138,14 +131,13 @@ void loop() {
     }
   }
   
-  // Khi thả tay ra: Chờ 0.5 giây (500ms) để chống nhiễu rồi mới trở lại bình thường
   if (isPetted && (currentMillis - lastTouchTime > 500)) {
     isPetted = false;
     forceRedraw = true;
     drawState(); 
   }
 
-  // 4. HỆ THỐNG IDLE ANIMATION
+  // 4. IDLE ANIMATION
   if (currentState == 0 && !isPetted && (currentMillis > nextActionTime)) {
     int action = random(100); 
     tft.fillScreen(ST77XX_BLACK); 
@@ -172,7 +164,7 @@ void loop() {
   }
 }
 
-// ================= CẬP NHẬT THỜI GIAN =================
+// ================= TIME UPDATE =================
 void updateTime() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return;
@@ -196,7 +188,7 @@ void updateTime() {
   }
 }
 
-// ================= CẬP NHẬT THỜI TIẾT TỪ OPEN-METEO =================
+// ================= OPEN-METEO API =================
 void updateWeather() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -218,35 +210,32 @@ void updateWeather() {
   }
 }
 
-// ================= VẼ GIAO DIỆN CHÍNH =================
+// =================RETURN TO MAIN SCREEN=================
 void drawState() {
   if (!forceRedraw) return; 
   
   tft.fillScreen(ST77XX_BLACK); 
 
   if (isPetted) {
-    // Vuốt ve: Mắt nhắm vui vẻ hình ^^ 
     
-    // Mắt trái ^
     tft.fillCircle(100, 100, 35, ST77XX_CYAN); 
     tft.fillCircle(100, 115, 35, ST77XX_BLACK); 
     
-    // Mắt phải ^
+   
     tft.fillCircle(220, 100, 35, ST77XX_CYAN); 
     tft.fillCircle(220, 115, 35, ST77XX_BLACK); 
   } 
   else if (currentState == 0) {
-    // Bình thường: Mắt mở to nhìn thẳng
+    
     tft.fillRoundRect(70, 80, 60, 80, 20, ST77XX_CYAN);
     tft.fillRoundRect(190, 80, 60, 80, 20, ST77XX_CYAN);
   } 
   else if (currentState == 1) {
-    // Đồng hồ
+   
     lastMinute = -1; 
     updateTime();
   } 
   else if (currentState == 2) {
-    // Thời tiết
     tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK); 
     tft.setTextSize(3); 
     int16_t x1, y1;
